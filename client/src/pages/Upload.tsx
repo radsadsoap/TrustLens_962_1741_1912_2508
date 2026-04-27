@@ -44,7 +44,7 @@ export default function Upload() {
                 video_id: "",
                 status: "failed",
                 explanation:
-                    "Cannot reach backend at http://localhost:8000. Start the server with: cd server && docker compose up",
+                    "Cannot reach backend. Start the server with: cd server && docker compose up --build",
             });
             return;
         }

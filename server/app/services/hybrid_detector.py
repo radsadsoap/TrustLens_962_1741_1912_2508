@@ -259,10 +259,6 @@ class HybridSpatialTemporalDetector:
             lstm_out, _ = self._lstm(seq)
         return lstm_out.squeeze(0)  # (T, 1024)
 
-    # -------------------------------------------------------------------------
-    # Score builders
-    # -------------------------------------------------------------------------
-
     def _build_spatial_analysis(
         self,
         frame_results: List[FrameAnalysis],
@@ -410,11 +406,24 @@ class HybridSpatialTemporalDetector:
             ) / cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).size > 0.1
         ) / n
 
+        # Facial inconsistency via inter-frame histogram variance
+        gray_hists = []
+        for frame, _ in frames:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            hist = cv2.calcHist([gray], [0], None, [64], [0, 256]).flatten()
+            hist = hist / (hist.sum() + 1e-8)
+            gray_hists.append(hist)
+        if len(gray_hists) >= 2:
+            hist_matrix = np.stack(gray_hists)
+            facial_score = min(1.0, float(np.var(hist_matrix)) * 50)
+        else:
+            facial_score = 0.0
+
         spatial = SpatialAnalysis(
-            facial_inconsistencies=0.0,
+            facial_inconsistencies=facial_score,
             lighting_anomalies=min(1.0, lighting),
             artifact_detection=min(1.0, artifact),
-            overall_score=min(1.0, (lighting + artifact) / 2),
+            overall_score=min(1.0, (facial_score * 0.4 + lighting * 0.2 + artifact * 0.4)),
         )
 
         overall_score = fake_ratio * 0.5 + avg_conf * 0.3 + t_overall * 0.2
@@ -507,17 +516,26 @@ class HybridSpatialTemporalDetector:
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
             for (fx, fy, fw, fh) in cascade.detectMultiScale(gray, 1.1, 4)[:3]:
-                if cv2.Laplacian(gray[fy:fy + fh, fx:fx + fw], cv2.CV_64F).var() < 120:
+                face_roi = gray[fy:fy + fh, fx:fx + fw]
+                blur_var = cv2.Laplacian(face_roi, cv2.CV_64F).var()
+                # Detect faces with blur, edge, or texture anomalies
+                edge_density = np.sum(cv2.Canny(face_roi, 50, 150)) / face_roi.size
+                has_blur = blur_var < 200
+                has_edge_issue = edge_density < 0.02 or edge_density > 0.12
+                if has_blur or has_edge_issue or is_fake:
+                    conf = 0.85 if is_fake else 0.55
+                    if has_blur and blur_var < 80:
+                        conf = min(conf + 0.1, 1.0)
                     regions.append(ArtifactRegion(
                         x=fx / w, y=fy / h, width=fw / w, height=fh / h,
-                        type="face_blur", confidence=0.8 if is_fake else 0.5,
+                        type="face_blur", confidence=conf,
                     ))
         except Exception:
             pass
 
         # Lighting
         center = gray[h // 4:3 * h // 4, w // 4:3 * w // 4]
-        if center.size and abs(np.mean(center) - np.mean(gray)) > 35:
+        if center.size and abs(float(np.mean(center)) - float(np.mean(gray))) > 20:
             regions.append(ArtifactRegion(
                 x=0.25, y=0.25, width=0.5, height=0.5,
                 type="lighting_inconsistency", confidence=0.75 if is_fake else 0.4,
