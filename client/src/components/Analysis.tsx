@@ -156,23 +156,41 @@ export default function Analysis({
 
         switch (analysisResult.status) {
             case "pending":
-            case "processing":
+            case "processing": {
+                const framesProcessed = analysisResult.frames_processed || 0;
+                const totalFrames = analysisResult.total_frames || 0;
+                const progressPct =
+                    totalFrames > 0
+                        ? Math.round((framesProcessed / totalFrames) * 100)
+                        : 0;
+
                 return (
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-lg flex flex-col items-center gap-4">
-                        <SpinnerGap
-                            size={48}
-                            className="text-blue-400 animate-spin"
-                        />
-                        <div className="text-center">
-                            <p className="text-blue-400 font-semibold mb-1">
-                                Analyzing video
-                            </p>
-                            <p className="text-xs text-gray-400">
-                                This may take 10-30 seconds
-                            </p>
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        {/* Battery progress bar */}
+                        <div className="w-full rounded-xl border border-blue-500/40 bg-gray-900/80 p-1 shadow-lg shadow-blue-500/10">
+                            <div className="relative w-full h-10 rounded-lg overflow-hidden bg-gray-800/60">
+                                <div
+                                    className="absolute inset-y-0 left-0 rounded-lg transition-all duration-700 ease-out"
+                                    style={{
+                                        width: `${progressPct}%`,
+                                        background:
+                                            "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)",
+                                        boxShadow:
+                                            "0 0 12px rgba(59,130,246,0.5)",
+                                    }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-sm font-bold text-white drop-shadow-md tracking-wide">
+                                        {totalFrames > 0
+                                            ? `Frame ${framesProcessed} / ${totalFrames}  —  ${progressPct}%`
+                                            : "Extracting frames"}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 );
+            }
 
             case "failed":
                 return (

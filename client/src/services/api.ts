@@ -58,6 +58,8 @@ export interface AnalysisResult {
     result?: "real" | "fake" | "uncertain";
     confidence?: number;
     overall_score?: number;
+    frames_processed?: number;
+    total_frames?: number;
     spatial_analysis?: SpatialAnalysis;
     temporal_analysis?: TemporalAnalysis;
     suspicious_frames?: FrameAnalysis[];

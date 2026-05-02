@@ -183,7 +183,7 @@ export default function Docs() {
                                             will extract frames from your video
                                             and analyze each frame for signs of
                                             manipulation. This process typically
-                                            takes 10-30 seconds depending on
+                                            takes 20-60 seconds depending on
                                             video length.
                                         </p>
                                     </div>

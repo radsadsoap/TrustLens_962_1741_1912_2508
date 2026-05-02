@@ -4,6 +4,25 @@
 
 A full-stack web application for detecting deepfake videos using a three-branch hybrid deep learning pipeline: ResNeXt-50 spatial feature extraction, bidirectional LSTM temporal modeling, and SigLIP per-frame classification — fused through a weighted decision layer.
 
+## 📝 Project Information
+
+| Field              | Details                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| **Project Title**  | TrustLens — Deepfake Video Detection using ResNeXt, Bidirectional LSTM |
+| **Type**           | Research                                                               |
+| **Institution**    | Chitkara University, Rajpura, Punjab, India                            |
+| **Department**     | Computer Science and Engineering                                       |
+| **Current Status** | Under Review                                                           |
+
+## 👥 Team Details
+
+| Roll Number | Name               | Email                             |
+| ----------- | ------------------ | --------------------------------- |
+| 2210990962  | Vinayak Sharma     | vinayak962.be22@chitkara.edu.in   |
+| 2210991741  | Kaniska Maity      | kaniska1741.be22@chitkara.edu.in  |
+| 2210991912  | Md Shayanur Rahman | md1912.be22@chitkara.edu.in       |
+| 2210992508  | Vanshika Kamra     | vanshika2508.be22@chitkara.edu.in |
+
 ![alt text](./client/public/image.png)
 
 ## 🎯 Project Overview

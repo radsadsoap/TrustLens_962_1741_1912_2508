@@ -19,7 +19,7 @@ _executor = ThreadPoolExecutor(max_workers=1)
 _detector: HybridSpatialTemporalDetector | None = None
 
 
-def _ensure_detector_and_analyze(file_path: str, video_id: str) -> AnalysisResult:
+def _ensure_detector_and_analyze(file_path: str, video_id: str, progress_callback=None) -> AnalysisResult:
     """
     Runs in the executor thread (never on the event loop).
     Initialises the detector on first call, then runs inference.
@@ -29,10 +29,12 @@ def _ensure_detector_and_analyze(file_path: str, video_id: str) -> AnalysisResul
         logger.info("Initialising Hybrid Spatial-Temporal Detector...")
         _detector = HybridSpatialTemporalDetector()
         logger.info("Detector ready.")
-    return _detector.analyze_video(file_path, video_id)
+    return _detector.analyze_video(file_path, video_id, progress_callback=progress_callback)
 
 # In-memory storage for analysis results (in production, use a database)
 analysis_cache: dict[str, AnalysisResult] = {}
+# Separate progress tracker (plain dict, reliable cross-thread mutation)
+progress_cache: dict[str, dict] = {}
 
 
 @router.post("/upload", response_model=VideoUploadResponse)
@@ -85,7 +87,12 @@ async def get_analysis_result(video_id: str):
     if video_id not in analysis_cache:
         raise HTTPException(status_code=404, detail="Video analysis not found")
     
-    return analysis_cache[video_id]
+    result = analysis_cache[video_id]
+    # Merge live progress into the response
+    if video_id in progress_cache:
+        prog = progress_cache[video_id]
+        result = result.model_copy(update=prog)
+    return result
 
 
 @router.post("/analyze/{video_id}")
@@ -130,12 +137,19 @@ async def analyze_video_task(video_id: str, file_path: str):
         analysis_cache[video_id].status = "processing"
         logger.info(f"Starting analysis for video {video_id}")
 
+        def progress_callback(frames_done: int, total_frames: int):
+            progress_cache[video_id] = {
+                "frames_processed": frames_done,
+                "total_frames": total_frames,
+            }
+
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            _executor, _ensure_detector_and_analyze, file_path, video_id
+            _executor, _ensure_detector_and_analyze, file_path, video_id, progress_callback
         )
 
         analysis_cache[video_id] = result
+        progress_cache.pop(video_id, None)
         logger.info(f"Analysis completed for video {video_id}: {result.result}")
 
     except Exception as e:
