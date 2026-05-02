@@ -4,6 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.api import router
 import os
+import logging
+
+# Configure logging so all module loggers (hybrid_detector etc.) output to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 
 # Create necessary directories

@@ -64,6 +64,10 @@ class AnalysisResult(BaseModel):
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
     overall_score: Optional[float] = Field(None, ge=0.0, le=1.0)
     
+    # Progress tracking (populated during processing)
+    frames_processed: Optional[int] = None
+    total_frames: Optional[int] = None
+    
     # Detailed analysis
     spatial_analysis: Optional[SpatialAnalysis] = None
     temporal_analysis: Optional[TemporalAnalysis] = None

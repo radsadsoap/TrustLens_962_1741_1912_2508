@@ -15,15 +15,15 @@ Architecture
                     Coefficient-of-variation of per-step L2 deltas measures
                     temporal discontinuities characteristic of face-swap artefacts.
 
-  Classification  : SigLIP binary classifier
-                    (prithivMLmods/Deep-Fake-Detector-Model, 94.44% accuracy)
+  Classification  : ViT binary classifier
+                    (dima806/deepfake_vs_real_image_detection, 99.27% accuracy)
                     Provides a calibrated per-frame deepfake probability.
 
-  Fusion          : Weighted combination
-                    overall_score = fake_ratio * 0.40
-                                  + avg_siglip_fake_prob * 0.30
-                                  + temporal_artifacts   * 0.20
-                                  + spatial_overall      * 0.10
+  Fusion          : Weighted combination (ViT-dominant)
+                    overall_score = fake_ratio * 0.45
+                                  + avg_vit_fake_prob * 0.40
+                                  + temporal_artifacts   * 0.10
+                                  + spatial_overall      * 0.05
 """
 
 import logging
@@ -57,20 +57,23 @@ class HybridSpatialTemporalDetector:
 
     Spatial branch  : ResNeXt-50 backbone (ImageNet pretrained) -> 2048-dim features.
     Temporal branch : Bidirectional LSTM over frame feature sequence.
-    Classification  : SigLIP per-frame binary classifier.
+    Classification  : ViT per-frame binary classifier (dima806/deepfake_vs_real_image_detection).
     Fusion          : Weighted combination of all three signals.
     """
 
-    SIGLIP_MODEL = "prithivMLmods/Deep-Fake-Detector-Model"
+    VIT_MODEL = "dima806/deepfake_vs_real_image_detection"
 
     def __init__(self):
         self.USE_FALLBACK = False
         try:
-            # SigLIP binary classifier
-            logger.info("Loading SigLIP classifier...")
+            # ViT binary classifier (dima806/deepfake_vs_real_image_detection)
+            logger.info("Loading ViT deepfake classifier...")
             self._classifier = hf_pipeline(
-                "image-classification", model=self.SIGLIP_MODEL
+                "image-classification", model=self.VIT_MODEL
             )
+            # Log the label mapping so we can verify it
+            model_config = self._classifier.model.config
+            logger.info(f"ViT label mapping: {model_config.id2label}")
 
             # ResNeXt-50 spatial feature extractor
             logger.info("Loading ResNeXt-50 spatial backbone...")
@@ -102,6 +105,11 @@ class HybridSpatialTemporalDetector:
                 dropout=0.3,
             ).eval()
 
+            # Haar cascade for face detection (used to crop faces for ViT)
+            self._face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            )
+
             logger.info("Hybrid Spatial-Temporal Detector ready.")
 
         except Exception as e:
@@ -112,9 +120,14 @@ class HybridSpatialTemporalDetector:
     # Public interface
     # -------------------------------------------------------------------------
 
-    def analyze_video(self, video_path: str, video_id: str = "") -> AnalysisResult:
+    def analyze_video(
+        self,
+        video_path: str,
+        video_id: str = "",
+        progress_callback=None,
+    ) -> AnalysisResult:
         start = datetime.now(timezone.utc)
-        mode = "CV fallback" if self.USE_FALLBACK else "Hybrid ResNeXt-LSTM + SigLIP"
+        mode = "CV fallback" if self.USE_FALLBACK else "Hybrid ResNeXt-LSTM + ViT"
         logger.info(f"Starting analysis [{mode}]: {video_path}")
 
         try:
@@ -122,10 +135,14 @@ class HybridSpatialTemporalDetector:
             if not frames:
                 raise ValueError("Could not extract frames from video")
 
+            # Report total frames immediately
+            if progress_callback:
+                progress_callback(0, len(frames))
+
             if self.USE_FALLBACK:
                 return self._analyze_cv_fallback(frames, video_id, start)
 
-            return self._analyze_hybrid(frames, video_id, start)
+            return self._analyze_hybrid(frames, video_id, start, progress_callback)
 
         except Exception as e:
             logger.error(f"Analysis error: {e}")
@@ -140,20 +157,33 @@ class HybridSpatialTemporalDetector:
         frames: List[Tuple[np.ndarray, float]],
         video_id: str,
         start: datetime,
+        progress_callback=None,
     ) -> AnalysisResult:
         logger.info(f"Processing {len(frames)} frames (hybrid mode)...")
 
-        # Step 1: Per-frame SigLIP classification + ResNeXt features
+        # Step 1: Per-frame ViT classification + ResNeXt features
         frame_results: List[FrameAnalysis] = []
         spatial_features: List[torch.Tensor] = []
 
         for idx, (frame, timestamp) in enumerate(frames):
-            if idx == 0 or (idx + 1) % 10 == 0 or idx == len(frames) - 1:
+            if idx == 0 or (idx + 1) % 5 == 0 or idx == len(frames) - 1:
                 logger.info(f"  Frame {idx + 1}/{len(frames)}")
 
-            is_fake, fake_prob = self._classify_frame_siglip(frame)
-            feat = self._extract_spatial_features(frame)
+            # Report progress after each frame
+            if progress_callback:
+                progress_callback(idx + 1, len(frames))
+
+            # Convert once, reuse for both ViT and ResNeXt
+            pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+            is_fake, fake_prob = self._classify_frame(frame, pil_img)
+            feat = self._extract_spatial_features(frame, pil_img)
             spatial_features.append(feat)
+
+            if idx == 0 or idx == len(frames) - 1:
+                logger.info(
+                    f"  Frame {idx + 1}: fake_prob={fake_prob:.3f}, is_fake={is_fake}"
+                )
 
             frame_results.append(FrameAnalysis(
                 frame_number=idx,
@@ -180,11 +210,18 @@ class HybridSpatialTemporalDetector:
         fake_ratio = fake_count / len(frames)
         avg_fake_prob = sum(f.confidence for f in frame_results) / len(frame_results)
 
+        logger.info(
+            f"Fusion inputs: fake_ratio={fake_ratio:.3f}, "
+            f"avg_fake_prob={avg_fake_prob:.3f}, "
+            f"temporal_artifacts={temporal_analysis.temporal_artifacts:.3f}, "
+            f"spatial_overall={spatial_analysis.overall_score:.3f}"
+        )
+
         overall_score = (
-            fake_ratio                              * 0.40
-            + avg_fake_prob                         * 0.30
-            + temporal_analysis.temporal_artifacts  * 0.20
-            + spatial_analysis.overall_score        * 0.10
+            fake_ratio                              * 0.45
+            + avg_fake_prob                         * 0.40
+            + temporal_analysis.temporal_artifacts  * 0.10
+            + spatial_analysis.overall_score        * 0.05
         )
 
         result = self._determine_result(overall_score, fake_ratio)
@@ -218,29 +255,75 @@ class HybridSpatialTemporalDetector:
     # Spatial branch
     # -------------------------------------------------------------------------
 
-    def _extract_spatial_features(self, frame: np.ndarray) -> torch.Tensor:
+    def _extract_spatial_features(self, frame: np.ndarray, pil_img: Image.Image | None = None) -> torch.Tensor:
         """Extract 2048-dim ResNeXt feature vector from a single frame."""
-        pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        tensor = self._preprocess(pil).unsqueeze(0)
+        if pil_img is None:
+            pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        tensor = self._preprocess(pil_img).unsqueeze(0)
         with torch.no_grad():
             features = self._spatial_extractor(tensor)
         return features.squeeze(0)  # (2048,)
 
-    def _classify_frame_siglip(self, frame: np.ndarray) -> Tuple[bool, float]:
-        """SigLIP per-frame classification -> (is_fake, fake_probability 0-1)."""
-        pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        results = self._classifier(pil)
+    FAKE_THRESHOLD = 0.5
+
+    def _crop_face(self, frame: np.ndarray) -> np.ndarray | None:
+        """Detect and crop the largest face from a frame.
+
+        The dima806 ViT model was trained on tightly-cropped face images.
+        Feeding full video frames (with backgrounds) makes it output ~99.9%
+        'Real' for everything.  Cropping the face region first lets the
+        model see the content it was trained on.
+
+        Returns the cropped face BGR array, or None if no face found.
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = self._face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60)
+        )
+        if len(faces) == 0:
+            return None
+        # Pick the largest face by area
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+        # Add 20% padding around the face for context (clamped to frame)
+        pad_w, pad_h = int(w * 0.2), int(h * 0.2)
+        fh, fw = frame.shape[:2]
+        x1 = max(0, x - pad_w)
+        y1 = max(0, y - pad_h)
+        x2 = min(fw, x + w + pad_w)
+        y2 = min(fh, y + h + pad_h)
+        return frame[y1:y2, x1:x2]
+
+    def _classify_frame(self, frame: np.ndarray, pil_img: Image.Image | None = None) -> Tuple[bool, float]:
+        """ViT per-frame classification -> (is_fake, fake_probability 0-1).
+
+        Crops the largest face before classification.  Falls back to the
+        full frame if no face is detected.
+        """
+        face_crop = self._crop_face(frame)
+        if face_crop is not None:
+            pil_input = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+        elif pil_img is not None:
+            pil_input = pil_img
+        else:
+            pil_input = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+        results = self._classifier(pil_input)
         fake_r = next((r for r in results if "fake" in r["label"].lower()), None)
         real_r = next((r for r in results if "real" in r["label"].lower()), None)
 
+        logger.info(
+            f"ViT raw -> {results} (face={'found' if face_crop is not None else 'NOT found'})"
+        )
+
         if fake_r and real_r:
-            if fake_r["score"] > real_r["score"]:
-                return True, fake_r["score"]
-            return False, 1.0 - real_r["score"]
+            fake_prob = fake_r["score"]
+            is_fake = fake_prob >= self.FAKE_THRESHOLD
+            return is_fake, fake_prob
         if fake_r:
-            return True, fake_r["score"]
+            return fake_r["score"] >= self.FAKE_THRESHOLD, fake_r["score"]
         if real_r:
-            return False, 1.0 - real_r["score"]
+            fake_prob = 1.0 - real_r["score"]
+            return fake_prob >= self.FAKE_THRESHOLD, fake_prob
         return False, 0.5
 
     # -------------------------------------------------------------------------
@@ -259,10 +342,6 @@ class HybridSpatialTemporalDetector:
             lstm_out, _ = self._lstm(seq)
         return lstm_out.squeeze(0)  # (T, 1024)
 
-    # -------------------------------------------------------------------------
-    # Score builders
-    # -------------------------------------------------------------------------
-
     def _build_spatial_analysis(
         self,
         frame_results: List[FrameAnalysis],
@@ -274,7 +353,7 @@ class HybridSpatialTemporalDetector:
           facial_inconsistencies -- variance of ResNeXt features across frames.
                                     High variance indicates facial swapping artefacts.
           lighting_anomalies     -- CV-based brightness consistency check.
-          artifact_detection     -- mean SigLIP fake probability across all frames.
+          artifact_detection     -- mean ViT fake probability across all frames.
           overall_score          -- weighted combination.
         """
         feat_matrix = torch.stack(spatial_features)  # (T, 2048)
@@ -410,11 +489,24 @@ class HybridSpatialTemporalDetector:
             ) / cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).size > 0.1
         ) / n
 
+        # Facial inconsistency via inter-frame histogram variance
+        gray_hists = []
+        for frame, _ in frames:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            hist = cv2.calcHist([gray], [0], None, [64], [0, 256]).flatten()
+            hist = hist / (hist.sum() + 1e-8)
+            gray_hists.append(hist)
+        if len(gray_hists) >= 2:
+            hist_matrix = np.stack(gray_hists)
+            facial_score = min(1.0, float(np.var(hist_matrix)) * 50)
+        else:
+            facial_score = 0.0
+
         spatial = SpatialAnalysis(
-            facial_inconsistencies=0.0,
+            facial_inconsistencies=facial_score,
             lighting_anomalies=min(1.0, lighting),
             artifact_detection=min(1.0, artifact),
-            overall_score=min(1.0, (lighting + artifact) / 2),
+            overall_score=min(1.0, (facial_score * 0.4 + lighting * 0.2 + artifact * 0.4)),
         )
 
         overall_score = fake_ratio * 0.5 + avg_conf * 0.3 + t_overall * 0.2
@@ -507,17 +599,26 @@ class HybridSpatialTemporalDetector:
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
             for (fx, fy, fw, fh) in cascade.detectMultiScale(gray, 1.1, 4)[:3]:
-                if cv2.Laplacian(gray[fy:fy + fh, fx:fx + fw], cv2.CV_64F).var() < 120:
+                face_roi = gray[fy:fy + fh, fx:fx + fw]
+                blur_var = cv2.Laplacian(face_roi, cv2.CV_64F).var()
+                # Detect faces with blur, edge, or texture anomalies
+                edge_density = np.sum(cv2.Canny(face_roi, 50, 150)) / face_roi.size
+                has_blur = blur_var < 200
+                has_edge_issue = edge_density < 0.02 or edge_density > 0.12
+                if has_blur or has_edge_issue or is_fake:
+                    conf = 0.85 if is_fake else 0.55
+                    if has_blur and blur_var < 80:
+                        conf = min(conf + 0.1, 1.0)
                     regions.append(ArtifactRegion(
                         x=fx / w, y=fy / h, width=fw / w, height=fh / h,
-                        type="face_blur", confidence=0.8 if is_fake else 0.5,
+                        type="face_blur", confidence=conf,
                     ))
         except Exception:
             pass
 
         # Lighting
         center = gray[h // 4:3 * h // 4, w // 4:3 * w // 4]
-        if center.size and abs(np.mean(center) - np.mean(gray)) > 35:
+        if center.size and abs(float(np.mean(center)) - float(np.mean(gray))) > 20:
             regions.append(ArtifactRegion(
                 x=0.25, y=0.25, width=0.5, height=0.5,
                 type="lighting_inconsistency", confidence=0.75 if is_fake else 0.4,
@@ -589,9 +690,9 @@ class HybridSpatialTemporalDetector:
     def _determine_result(
         self, overall_score: float, fake_ratio: float
     ) -> DeepfakeResult:
-        if fake_ratio >= 0.40 or overall_score >= 0.55:
+        if fake_ratio >= 0.50 or overall_score >= 0.55:
             return DeepfakeResult.FAKE
-        if fake_ratio <= 0.20 and overall_score <= 0.35:
+        if fake_ratio <= 0.25 and overall_score <= 0.35:
             return DeepfakeResult.REAL
         return DeepfakeResult.UNCERTAIN
 

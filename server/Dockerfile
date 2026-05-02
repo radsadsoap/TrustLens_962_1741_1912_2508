@@ -35,7 +35,7 @@ ENV HF_HOME=/models/hf_cache \
 
 RUN python -c "\
 from transformers import pipeline; \
-pipeline('image-classification', model='prithivMLmods/Deep-Fake-Detector-Model'); \
+pipeline('image-classification', model='dima806/deepfake_vs_real_image_detection'); \
 import torchvision.models as m; \
 m.resnext50_32x4d(weights=m.ResNeXt50_32X4D_Weights.IMAGENET1K_V2); \
 print('All weights downloaded.')"

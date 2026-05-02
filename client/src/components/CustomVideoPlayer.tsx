@@ -76,8 +76,11 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
 
             if (!video || !canvas) return;
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Size canvas to match the container's CSS pixel size
+            const containerW = video.clientWidth;
+            const containerH = video.clientHeight;
+            canvas.width = containerW;
+            canvas.height = containerH;
 
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
@@ -86,40 +89,121 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
 
             if (!showArtifacts) return;
 
-            const currentFrame = suspiciousFrames.find(
-                (frame) => Math.abs(frame.timestamp - currentTime) < 0.5,
-            );
+            // Find the nearest analyzed frame within a reasonable window
+            // (frames are sampled sparsely, so use half the gap between samples)
+            let currentFrame: FrameAnalysis | undefined;
+            let bestDist = Infinity;
+            for (const frame of suspiciousFrames) {
+                const dist = Math.abs(frame.timestamp - currentTime);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    currentFrame = frame;
+                }
+            }
 
-            if (!currentFrame) return;
+            // Use half the average gap between sampled frames as tolerance,
+            // with a minimum of 1s and max of 5s
+            const avgGap =
+                suspiciousFrames.length > 1
+                    ? (suspiciousFrames[suspiciousFrames.length - 1].timestamp -
+                          suspiciousFrames[0].timestamp) /
+                      (suspiciousFrames.length - 1)
+                    : 2;
+            const tolerance = Math.min(5, Math.max(1, avgGap / 2));
+            if (!currentFrame || bestDist > tolerance) return;
 
-            // Only draw face and lighting regions — skip edge/blur grid noise
-            const regions = (currentFrame.artifact_regions ?? []).filter(
-                (r) =>
-                    r.type === "face_blur" ||
-                    r.type === "lighting_inconsistency",
-            );
+            // Compute where the video content actually renders (object-contain)
+            const videoW = video.videoWidth;
+            const videoH = video.videoHeight;
+            if (!videoW || !videoH) return;
+
+            const videoAspect = videoW / videoH;
+            const containerAspect = containerW / containerH;
+
+            let renderedW: number,
+                renderedH: number,
+                offsetX: number,
+                offsetY: number;
+            if (videoAspect > containerAspect) {
+                renderedW = containerW;
+                renderedH = containerW / videoAspect;
+            } else {
+                renderedH = containerH;
+                renderedW = containerH * videoAspect;
+            }
+            offsetX = (containerW - renderedW) / 2;
+            offsetY = (containerH - renderedH) / 2;
+
+            // Draw ALL detected artifact regions
+            const regions = currentFrame.artifact_regions ?? [];
+
+            const regionColors: Record<
+                string,
+                { stroke: string; fill: string; label: string }
+            > = {
+                face_blur: {
+                    stroke: "rgba(160, 80, 255, 0.95)",
+                    fill: "rgba(160, 80, 255, 0.12)",
+                    label: "Face",
+                },
+                blur_anomaly: {
+                    stroke: "rgba(255, 140, 0, 0.9)",
+                    fill: "rgba(255, 140, 0, 0.1)",
+                    label: "Blur",
+                },
+                lighting_inconsistency: {
+                    stroke: "rgba(255, 0, 200, 0.9)",
+                    fill: "rgba(255, 0, 200, 0.1)",
+                    label: "Lighting",
+                },
+                edge_inconsistency: {
+                    stroke: "rgba(255, 220, 0, 0.85)",
+                    fill: "rgba(255, 220, 0, 0.08)",
+                    label: "Edge",
+                },
+            };
+
+            const defaultColor = {
+                stroke: "rgba(255, 220, 0, 0.85)",
+                fill: "rgba(255, 220, 0, 0.08)",
+                label: "Anomaly",
+            };
 
             regions.forEach((region) => {
-                const x = region.x * canvas.width;
-                const y = region.y * canvas.height;
-                const w = region.width * canvas.width;
-                const h = region.height * canvas.height;
-                ctx.strokeStyle =
-                    region.type === "face_blur"
-                        ? "rgba(255, 80, 80, 0.9)"
-                        : "rgba(255, 200, 0, 0.8)";
+                const x = offsetX + region.x * renderedW;
+                const y = offsetY + region.y * renderedH;
+                const w = region.width * renderedW;
+                const h = region.height * renderedH;
+                const style = regionColors[region.type] ?? defaultColor;
+
+                // Semi-transparent fill
+                ctx.fillStyle = style.fill;
+                ctx.fillRect(x, y, w, h);
+
+                // Border
+                ctx.strokeStyle = style.stroke;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, y, w, h);
+
+                // Label tag
+                const label = `${style.label} ${Math.round(region.confidence * 100)}%`;
+                ctx.font = "bold 11px sans-serif";
+                const labelW = ctx.measureText(label).width + 8;
+                const labelH = 18;
+                ctx.fillStyle = style.stroke;
+                ctx.fillRect(x, y - labelH, labelW, labelH);
+                ctx.fillStyle = "white";
+                ctx.fillText(label, x + 4, y - 5);
             });
 
-            // Small badge in top-right when frame is suspicious
+            // Badge in top-right of the video area when frame is suspicious
             if (currentFrame.is_fake) {
                 const label = `⚠ ${Math.round(currentFrame.confidence * 100)}%`;
                 ctx.font = "bold 13px sans-serif";
                 const bw = ctx.measureText(label).width + 16;
                 const bh = 26;
-                const bx = canvas.width - bw - 8;
-                const by = 8;
+                const bx = offsetX + renderedW - bw - 8;
+                const by = offsetY + 8;
                 ctx.fillStyle = "rgba(220, 38, 38, 0.82)";
                 ctx.fillRect(bx, by, bw, bh);
                 ctx.fillStyle = "white";
@@ -141,6 +225,7 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
 
             const handlePlay = () => setIsPlaying(true);
             const handlePause = () => setIsPlaying(false);
+            const handleResize = () => drawArtifacts();
 
             video.addEventListener("timeupdate", handleTimeUpdate);
             video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -148,6 +233,7 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
             video.addEventListener("pause", handlePause);
             video.addEventListener("loadedmetadata", drawArtifacts);
             video.addEventListener("resize", drawArtifacts);
+            window.addEventListener("resize", handleResize);
 
             return () => {
                 video.removeEventListener("timeupdate", handleTimeUpdate);
@@ -159,6 +245,7 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
                 video.removeEventListener("pause", handlePause);
                 video.removeEventListener("loadedmetadata", drawArtifacts);
                 video.removeEventListener("resize", drawArtifacts);
+                window.removeEventListener("resize", handleResize);
             };
         }, [drawArtifacts]);
 
@@ -178,7 +265,6 @@ const CustomVideoPlayer = forwardRef<VideoPlayerHandle, CustomVideoPlayerProps>(
                     <canvas
                         ref={canvasRef}
                         className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                        style={{ objectFit: "contain" }}
                     />
                 </div>
 

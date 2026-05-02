@@ -2,13 +2,32 @@
 
 **AI-Based Deepfake Detection Using Hybrid Spatial-Temporal Deep Learning Framework**
 
-A full-stack web application for detecting deepfake videos using advanced spatial and temporal analysis techniques.
+A full-stack web application for detecting deepfake videos using a three-branch hybrid deep learning pipeline: ResNeXt-50 spatial feature extraction, bidirectional LSTM temporal modeling, and SigLIP per-frame classification — fused through a weighted decision layer.
+
+## 📝 Project Information
+
+| Field              | Details                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| **Project Title**  | TrustLens — Deepfake Video Detection using ResNeXt, Bidirectional LSTM |
+| **Type**           | Research                                                               |
+| **Institution**    | Chitkara University, Rajpura, Punjab, India                            |
+| **Department**     | Computer Science and Engineering                                       |
+| **Current Status** | Under Review                                                           |
+
+## 👥 Team Details
+
+| Roll Number | Name               | Email                             |
+| ----------- | ------------------ | --------------------------------- |
+| 2210990962  | Vinayak Sharma     | vinayak962.be22@chitkara.edu.in   |
+| 2210991741  | Kaniska Maity      | kaniska1741.be22@chitkara.edu.in  |
+| 2210991912  | Md Shayanur Rahman | md1912.be22@chitkara.edu.in       |
+| 2210992508  | Vanshika Kamra     | vanshika2508.be22@chitkara.edu.in |
 
 ![alt text](./client/public/image.png)
 
 ## 🎯 Project Overview
 
-This project addresses the challenge of detecting AI-generated deepfake videos through a comprehensive analysis system that examines both spatial inconsistencies within frames and temporal irregularities across video sequences.
+TrustLens addresses the challenge of detecting AI-generated deepfake videos through a multi-modal analysis system that jointly examines spatial inconsistencies within frames, temporal irregularities across video sequences, and per-frame semantic authenticity signals.
 
 ### Problem Statement
 
@@ -21,54 +40,85 @@ The rapid advancement of deep learning technologies has enabled the creation of 
 
 ### Solution
 
-A hybrid spatial-temporal detection framework that combines:
+A hybrid spatial-temporal detection framework with three complementary branches:
 
-- **Spatial Analysis**: Facial feature consistency, lighting anomalies, artifact detection
-- **Temporal Analysis**: Frame continuity, motion consistency, temporal artifacts
-- **User-Friendly Interface**: Web-based platform accessible to non-technical users
+- **Spatial Branch (ResNeXt-50)**: Extracts 2048-dim deep features per frame to detect facial inconsistencies, lighting anomalies, and blending artifacts
+- **Temporal Branch (Bidirectional LSTM)**: Models the temporal evolution of spatial features to detect flickering, motion discontinuities, and temporal jitter
+- **Classification Branch (SigLIP)**: Per-frame binary deepfake classifier (94.44% accuracy) providing calibrated fake probabilities
+- **Fusion Layer**: Weighted combination of all three signals with asymmetric threshold decision logic
+- **CV Fallback**: Graceful degradation to classical computer vision heuristics when deep models cannot load
 
 ## 🏗️ Architecture
 
 ```
-demo/
-├── client/          # React + TypeScript frontend
-│   ├── src/
-│   │   ├── components/    # UI components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API integration
-│   │   └── assets/
-│   └── package.json
+TrustLens/
+├── client/                    # React 19 + TypeScript frontend
+│   └── src/
+│       ├── components/
+│       │   ├── Header.tsx              # Navigation header
+│       │   ├── Player.tsx              # Video upload interface (drag & drop)
+│       │   ├── CustomVideoPlayer.tsx   # Canvas overlay + timeline markers
+│       │   ├── Analysis.tsx            # Results display + metrics
+│       │   ├── FrameDetailModal.tsx    # Full-screen frame inspection modal
+│       │   └── DocsNav.tsx             # Documentation sidebar nav
+│       ├── pages/
+│       │   ├── Upload.tsx              # Main feature page
+│       │   └── Docs.tsx                # Documentation page
+│       ├── services/
+│       │   └── api.ts                  # API client with timeout handling
+│       └── App.tsx                     # Router (/ and /docs)
 │
-└── server/          # FastAPI Python backend
-    ├── app/
-    │   ├── services/      # Business logic
-    │   ├── api.py         # API routes
-    │   ├── models.py      # Data models
-    │   └── main.py        # Application entry
-    ├── Dockerfile
-    ├── docker-compose.yml
-    └── requirements.txt
+├── server/                    # FastAPI Python backend
+│   ├── app/
+│   │   ├── services/
+│   │   │   ├── hybrid_detector.py     # CORE: 3-branch hybrid AI detection
+│   │   │   └── video_service.py       # File save/validate helpers
+│   │   ├── api.py                     # API routes + lazy detector init
+│   │   ├── models.py                  # Pydantic data models
+│   │   ├── config.py                  # Env-based configuration
+│   │   └── main.py                    # FastAPI app entry point
+│   ├── Dockerfile                     # Multi-stage build with baked model weights
+│   ├── docker-compose.yml
+│   └── requirements.txt
+│
+└── CLAUDE Instructions/       # Project documentation & research papers
 ```
 
 ## 🚀 Tech Stack
 
 ### Frontend
 
-- **React 19** - Modern UI framework with latest features
-- **TypeScript** - Type-safe development
-- **Vite** - Fast build tool and dev server
-- **TailwindCSS 4** - Utility-first CSS framework
-- **React Router 7** - Client-side routing
-- **Phosphor Icons** - Beautiful icon library
+| Tech           | Version | Role                    |
+| -------------- | ------- | ----------------------- |
+| React          | 19.2    | UI framework            |
+| TypeScript     | latest  | Type safety             |
+| Vite           | 7.3     | Build tool / dev server |
+| TailwindCSS    | 4.1     | Utility-first CSS       |
+| React Router   | 7.13    | Client-side routing     |
+| Phosphor Icons | 2.1     | Icon library            |
 
 ### Backend
 
-- **FastAPI 0.109** - High-performance Python web framework
-- **Python 3.11-slim** - Modern Python runtime
-- **OpenCV 4.9** - Computer vision library for frame analysis
-- **Pydantic** - Data validation and settings management
-- **Uvicorn** - ASGI server
-- **Docker & Docker Compose** - Containerized deployment
+| Tech              | Version  | Role                              |
+| ----------------- | -------- | --------------------------------- |
+| Python            | 3.11     | Runtime                           |
+| FastAPI           | 0.109    | Web framework                     |
+| Uvicorn           | 0.27     | ASGI server                       |
+| PyTorch (CPU)     | ≥2.0     | Model runtime                     |
+| TorchVision       | ≥0.15    | ResNeXt-50 backbone               |
+| Transformers      | ≥4.35    | SigLIP pipeline (local inference) |
+| OpenCV (headless) | 4.9.0.80 | Frame extraction & CV analysis    |
+| NumPy             | 1.26.3   | Numerical operations              |
+| Pydantic          | 2.5.3    | Data models & env config          |
+| Docker            | latest   | Containerized deployment          |
+
+### AI Models
+
+| Model      | Architecture                       | Role                          | Performance      |
+| ---------- | ---------------------------------- | ----------------------------- | ---------------- |
+| ResNeXt-50 | CNN (ImageNet pretrained)          | Spatial feature extraction    | 2048-dim vectors |
+| BiLSTM     | 2-layer, hidden=512, bidirectional | Temporal consistency analysis | 1024-dim states  |
+| SigLIP     | Vision-language classifier         | Per-frame real/fake detection | 94.44% accuracy  |
 
 ## 📋 Prerequisites
 
@@ -79,13 +129,7 @@ demo/
 
 ### Option 1: Docker (Recommended)
 
-1. **Clone the repository**
-
-```bash
-cd demo
-```
-
-2. **Start Backend**
+1. **Start Backend** (first run downloads & bakes model weights into image)
 
 ```bash
 cd server
@@ -94,7 +138,7 @@ docker compose up --build
 
 The backend API will be available at `http://localhost:8000`
 
-3. **Start Frontend** (in a new terminal)
+2. **Start Frontend** (in a new terminal)
 
 ```bash
 cd client
@@ -104,12 +148,14 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173`
 
-4. **Stop Services**
+3. **Stop Services**
 
 ```bash
 # In server directory
 docker compose down
 ```
+
+> **Note (Windows)**: Use `http://127.0.0.1:8000` instead of `localhost` in the frontend `.env` — Windows resolves `localhost` to IPv6 which doesn't route correctly to Docker.
 
 ### Option 2: Local Development
 
@@ -145,7 +191,7 @@ cd client
 # Install dependencies
 npm install
 
-# Create .env file
+# Create .env file (set VITE_API_URL=http://127.0.0.1:8000/api)
 cp .env.example .env
 
 # Run development server
@@ -157,251 +203,101 @@ npm run dev
 1. **Navigate to** `http://localhost:5173`
 
 2. **Upload a video**:
-    - Click "Upload Video" button
-    - Or drag and drop a video file
-    - Supported formats: MP4, AVI, MOV, MKV, WebM
+    - Click the upload area or drag and drop a video file
+    - Supported formats: MP4, AVI, MOV, MKV, WebM (max 100 MB)
+    - Video preview appears immediately
 
 3. **Run analysis**:
-    - Click the "Run Analysis" button in the Analysis panel
-    - The system processes the video frame by frame (~30 frames)
-    - Analysis typically takes 10-30 seconds depending on video length
+    - Click the **"Run Analysis"** button
+    - Health check verifies backend is reachable
+    - Video uploads, then analysis triggers automatically
+    - Poll for results every 2 seconds until complete
+    - First analysis takes longer (~2-5 min cold start for model loading)
 
 4. **Review results**:
-    - View overall detection result (Real/Fake/Suspicious)
+    - View overall verdict: **Real** / **Fake** / **Uncertain**
     - Check confidence percentage
-    - Explore the interactive timeline with anomaly markers
-    - Click on timestamps to jump to specific suspicious frames
+    - Explore detection metrics: Facial, Lighting, Artifacts, Continuity, Motion, Temporal
+    - Read the natural language explanation and recommendations
 
 5. **Examine artifacts**:
-    - View color-coded artifact overlays on the video player
-    - Orange: Blur artifacts
-    - Yellow: Edge inconsistencies
-    - Purple: Face regions
-    - Magenta: Lighting anomalies
+    - View color-coded artifact overlays on the video player:
+        - 🟠 Orange: Blur artifacts
+        - 🟡 Yellow: Edge inconsistencies
+        - 🟣 Purple: Face regions
+        - 🔴 Magenta: Lighting anomalies
     - Toggle overlays on/off with the button below the video
+    - Click timeline markers to jump to suspicious frames
+    - Open the **Frame Detail Modal** to inspect all 30 analyzed frames
 
-## � Project Flow
+## 🔬 Detection Pipeline
 
-### End-to-End Process
-
-```
-┌───────────────┐
-│  User Action  │ Upload video file (MP4, AVI, MOV, etc.)
-└───────┬───────┘
-        │
-        ▼
-┌─────────────────────────────────────────────┐
-│  Frontend (React)                           │
-│  - File validation                          │
-│  - POST /api/videos/upload                  │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│  Backend (FastAPI)                          │
-│  - Save video to /uploads directory         │
-│  - Extract metadata (duration, size, etc.)  │
-│  - Return video_id and metadata             │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌───────────────┐
-│  User Action  │ Click "Run Analysis" button
-└───────┬───────┘
-        │
-        ▼
-┌─────────────────────────────────────────────┐
-│  Frontend (React)                           │
-│  - POST /api/videos/analyze                 │
-│  - Receive task_id                          │
-│  - Start polling /api/analysis/{task_id}    │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│  Backend (FastAPI) - Background Task        │
-│  1. Frame Extraction (OpenCV)               │
-│     - Extract ~30 frames evenly             │
-│     - Convert to numpy arrays               │
-│                                             │
-│  2. Frame Analysis (6 Detection Signals)    │
-│     For each frame:                         │
-│     - Blur analysis (Laplacian)             │
-│     - Edge detection (Canny)                │
-│     - Brightness/Contrast stats             │
-│     - Color histogram analysis              │
-│     - Noise pattern detection               │
-│     - Face detection (Haar Cascade)         │
-│     - Compression artifacts (DCT)           │
-│     - Calculate weighted suspicion score    │
-│     - Mark suspicious if score ≥ 0.35       │
-│                                             │
-│  3. Artifact Localization                   │
-│     For ALL frames:                         │
-│     - 4x4 grid analysis                     │
-│     - Face region detection                 │
-│     - Contour detection                     │
-│     - Store regions with type & confidence  │
-│                                             │
-│  4. Overall Verdict                         │
-│     - FAKE if ≥40% frames suspicious        │
-│     - REAL if ≤20% frames suspicious        │
-│     - SUSPICIOUS if between 20-40%          │
-│                                             │
-│  5. Return AnalysisResult                   │
-│     - Verdict and confidence                │
-│     - All frames with timestamps            │
-│     - Artifact regions for each frame       │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│  Frontend (React) - Results Display         │
-│  1. CustomVideoPlayer                       │
-│     - Yellow markers on timeline (anomalies)│
-│     - Canvas overlay for artifacts          │
-│     - Color-coded regions (blur/edge/etc.)  │
-│     - Play/Pause controls                   │
-│     - Seekable progress bar                 │
-│                                             │
-│  2. Analysis Panel                          │
-│     - Overall verdict badge                 │
-│     - Confidence percentage                 │
-│     - Clickable timestamp cards:            │
-│       * Frame number & timestamp            │
-│       * Confidence score                    │
-│       * List of anomalies detected          │
-│     - Click to seek video to that frame     │
-│                                             │
-│  3. Interactive Features                    │
-│     - Click timeline marker → seek video    │
-│     - Click timestamp card → seek video     │
-│     - Toggle artifact overlays on/off       │
-│     - View artifact legend                  │
-└─────────────────────────────────────────────┘
-```
-
-### Data Flow Diagram
+### Hybrid Deep Learning Pipeline (Primary)
 
 ```
-Video File → Upload API → File Storage
-                            ↓
-                    Video Metadata (id, duration, etc.)
-                            ↓
-User clicks "Run Analysis"  ↓
-                            ↓
-                    Analyze API → Background Task
-                            ↓
-                    Frame Extraction (OpenCV)
-                            ↓
-                    Frame Analysis (6 signals)
-                            ↓
-                    Artifact Detection (grid + faces)
-                            ↓
-                    Overall Verdict Calculation
-                            ↓
-                    AnalysisResult Model
-                            ↓
-Frontend Polling ← Task Status API
-                            ↓
-                    Results Display:
-                    - Video Player with Overlays
-                    - Interactive Timeline
-                    - Clickable Timestamp Cards
+Input Video
+    │
+    ▼
+Frame Extraction (OpenCV, ~30 frames uniformly sampled)
+    │
+    ├──────────────────┬──────────────────┬──────────────────┐
+    │                  │                  │                  │
+    ▼                  ▼                  ▼                  ▼
+Spatial Branch    Classification     Temporal Branch    CV Artifacts
+(ResNeXt-50)      (SigLIP)          (BiLSTM)          (OpenCV)
+2048-dim features  fake_prob/frame    LSTM hidden       blur, edges,
+per frame          is_fake/frame      state deltas      faces, lighting
+    │                  │                  │                  │
+    └──────────────────┴──────────────────┴──────────────────┘
+                              │
+                              ▼
+                     Weighted Fusion Layer
+    overall = 0.40 × fake_ratio + 0.30 × avg_fake_prob
+            + 0.20 × temporal_artifacts + 0.10 × spatial_score
+                              │
+                              ▼
+                     Verdict + Confidence
+    FAKE:      fake_ratio ≥ 0.40 OR overall ≥ 0.55
+    REAL:      fake_ratio ≤ 0.20 AND overall ≤ 0.35
+    UNCERTAIN: otherwise
 ```
 
-## �🔍 Detection Features
+### CV Fallback (when deep models fail to load)
 
-### Enhanced Computer Vision Algorithm
+Activates automatically if `transformers` or `torch` model loading fails. Uses Laplacian blur, Canny edges, brightness stats, color histograms, noise patterns, and DCT analysis — no deep learning required.
 
-### Enhanced Computer Vision Algorithm
+### End-to-End UX Flow
 
-The system uses a 6-signal detection approach with OpenCV:
-
-1. **Blur Analysis (Laplacian Variance)**
-    - Calculates image sharpness using Laplacian operator
-    - Detects unnatural blur patterns typical of AI-generated faces
-    - Weight: 15% of suspicion score
-
-2. **Edge Consistency (Canny Detection)**
-    - Analyzes edge density and patterns using Canny edge detection
-    - Identifies manipulation artifacts and inconsistent boundaries
-    - Weight: 15% of suspicion score
-
-3. **Brightness & Contrast Analysis**
-    - Examines statistical properties of pixel intensities
-    - Detects lighting inconsistencies across frames
-    - Weight: 10% of suspicion score
-
-4. **Color Distribution (Histogram Analysis)**
-    - Analyzes color channel distributions for anomalies
-    - Detects unnatural color patterns
-    - Weight: 10% of suspicion score
-
-5. **Noise Pattern Analysis**
-    - Detects high-frequency noise typical of compression/generation
-    - Identifies unnatural noise patterns
-    - Weight: 15% of suspicion score
-
-6. **Face Detection (Haar Cascade)**
-    - Identifies and analyzes facial regions
-    - Higher weight given to face areas for manipulation detection
-    - Weight: 20% of suspicion score
-
-7. **Compression Artifacts (DCT Analysis)**
-    - Analyzes encoding inconsistencies using Discrete Cosine Transform
-    - Detects re-encoding artifacts typical of deepfakes
-    - Weight: 15% of suspicion score
-
-### Artifact Localization
-
-- **Grid-based Analysis**: 4x4 grid analysis of each frame
-- **Face Region Detection**: Focused analysis on detected faces
-- **Contour Detection**: Identifies high-contrast suspicious regions
-- **Normalized Coordinates**: Artifact regions scaled to 0-1 for consistent overlay
-
-### Results Include
-
-- Overall verdict (Real/Fake/Suspicious)
-- Confidence percentage
-- Frame-by-frame analysis with timestamps
-- Interactive timeline with anomaly markers
-- Clickable timestamp cards showing:
-    - Exact timestamp and frame number
-    - Confidence score for that frame
-    - List of detected anomalies
-- Color-coded artifact overlays on video player
-- Toggle-able visualization of detected regions
-
-## 📡 API Documentation
-
-Once the backend is running, visit:
-
-- **Swagger UI**: http://localhost:8000/api/docs
-- **ReDoc**: http://localhost:8000/api/redoc
-
-### Key Endpoints
-
-**Upload Video**
-
-```http
-POST /api/upload
-Content-Type: multipart/form-data
-
-file: <video_file>
+```
+User selects/drops video → preview shown → "Run Analysis" button appears
+    │
+    ▼
+Health check (5s timeout) → fail fast if backend unreachable
+    │
+    ▼
+POST /api/upload (60s timeout) → returns video_id
+    │
+    ▼
+POST /api/analyze/{video_id} (10s timeout) → triggers background task
+    │
+    ▼
+Poll GET /api/analysis/{video_id} every 2s
+    │
+    ▼
+Results display: verdict, metrics, artifact overlays, frame details
 ```
 
-**Get Analysis Result**
+## 📡 API Reference
 
-```http
-GET /api/analysis/{video_id}
-```
+| Method | Endpoint                   | Description                        | Timeout |
+| ------ | -------------------------- | ---------------------------------- | ------- |
+| GET    | `/health`                  | Health check (no model loading)    | 5s      |
+| POST   | `/api/upload`              | Upload video → returns `video_id`  | 60s     |
+| POST   | `/api/analyze/{video_id}`  | Trigger analysis (background task) | 10s     |
+| GET    | `/api/analysis/{video_id}` | Poll for result                    | -       |
 
-**Health Check**
-
-```http
-GET /health
-```
+**Swagger UI**: http://localhost:8000/api/docs  
+**ReDoc**: http://localhost:8000/api/redoc
 
 ## 🔧 Configuration
 
@@ -421,13 +317,15 @@ MIN_CONFIDENCE_THRESHOLD=0.7
 ### Frontend (.env)
 
 ```env
-VITE_API_URL=http://localhost:8000/api
+VITE_API_URL=http://127.0.0.1:8000/api
 ```
+
+> Use `127.0.0.1` on Windows — `localhost` resolves to IPv6 which doesn't route correctly to Docker.
 
 ## 🐳 Docker Commands
 
 ```bash
-# Build and start
+# Build and start (first run bakes model weights into image)
 docker compose up --build
 
 # Run in background
@@ -446,80 +344,17 @@ docker compose down -v
 docker compose build --no-cache
 ```
 
-## 📁 Project Structure Details
-
-### Client Structure
-
-```
-client/src/
-├── components/
-│   ├── Header.tsx              # Navigation header
-│   ├── Player.tsx              # Video upload component
-│   ├── CustomVideoPlayer.tsx   # Custom player with timeline & overlays
-│   ├── Analysis.tsx            # Results display with clickable timeline
-│   └── DocsNav.tsx             # Documentation navigation
-├── pages/
-│   ├── Upload.tsx              # Main upload page with player integration
-│   └── Docs.tsx                # Documentation page
-├── services/
-│   └── api.ts                  # API client service
-└── App.tsx                     # Main app component
-```
-
-### Server Structure
-
-```
-server/app/
-├── services/
-│   ├── video_service.py          # Video processing & storage
-│   └── huggingface_detector.py   # Enhanced CV detection algorithm
-├── api.py                       # API routes & background tasks
-├── models.py                    # Pydantic models (VideoUpload, AnalysisResult, etc.)
-├── config.py                    # Configuration settings
-└── main.py                      # FastAPI app entry point
-```
-
 ## 🔮 Future Enhancements
 
-- [ ] Real AI model integration (ResNeXt-LSTM)
 - [ ] GPU acceleration support
 - [ ] Audio deepfake detection
 - [ ] Real-time streaming analysis
 - [ ] User authentication system
-- [ ] Database integration (PostgreSQL)
+- [ ] Database integration (PostgreSQL) for result persistence
 - [ ] Result history and analytics
 - [ ] Batch video processing
 - [ ] API rate limiting
-- [ ] Advanced visualization dashboard
-- [ ] Mobile responsive improvements
-- [ ] Progressive Web App (PWA)
-
-## 🧪 Development
-
-### Running Tests
-
-```bash
-# Backend tests (when implemented)
-cd server
-pytest
-
-# Frontend tests
-cd client
-npm test
-```
-
-### Code Quality
-
-```bash
-# Backend linting
-cd server
-flake8 app/
-black app/
-
-# Frontend linting
-cd client
-npm run lint
-```
+- [ ] Train BiLSTM on deepfake-specific data (currently random initialization)
 
 ## 🚨 Troubleshooting
 
@@ -532,30 +367,29 @@ npm run lint
 ### Frontend can't connect to backend
 
 - Verify backend is running on port 8000
+- On Windows, use `http://127.0.0.1:8000/api` (not `localhost`)
 - Check CORS settings in backend `.env`
-- Ensure `VITE_API_URL` in frontend `.env` is correct
+
+### First analysis is slow
+
+- First `Run Analysis` click triggers model loading (~2-5 min cold start)
+- Subsequent analyses reuse loaded models and are much faster
+- Docker image pre-downloads model weights to avoid runtime downloads
 
 ### Upload fails
 
-- Check file size (max 100MB by default)
-- Verify file format is supported
+- Check file size (max 100 MB by default)
+- Verify file format is supported (.mp4, .avi, .mov, .mkv, .webm)
 - Check backend logs for errors
 
-### Video analysis stuck
+## ⚠️ Known Limitations
 
-- Refresh the page
-- Try uploading again
-- Check backend container logs
-
-## 📝 Notes
-
-**Important**: The current detection system uses a simulation algorithm for demonstration purposes. For production use:
-
-1. Integrate actual pre-trained AI models (ResNeXt-LSTM)
-2. Use external deepfake detection APIs
-3. Implement proper database for result storage
-4. Add authentication and authorization
-5. Implement rate limiting and caching
+- **BiLSTM weights randomly initialized** — temporal scoring is structurally sound but not trained on deepfake-specific data
+- **In-memory storage** — analysis results stored in `analysis_cache` dict, lost on server restart
+- **No authentication or rate limiting** — demo-grade only
+- **CPU-only** — no GPU acceleration
+- **Single analysis at a time** — `ThreadPoolExecutor(max_workers=1)` serializes concurrent analyses
+- **HuggingFace API deprecated** — model runs locally only via `transformers` pipeline
 
 ## 👥 Contributing
 
@@ -568,7 +402,9 @@ This is an academic project. For collaboration inquiries, please contact the pro
 ## 🙏 Acknowledgments
 
 - FastAPI and React communities
-- OpenCV contributors
+- OpenCV and PyTorch contributors
+- HuggingFace Transformers library
+- `prithivMLmods/Deep-Fake-Detector-Model` (SigLIP deepfake classifier)
 - Deepfake detection research community
 - Academic advisors and mentors
 

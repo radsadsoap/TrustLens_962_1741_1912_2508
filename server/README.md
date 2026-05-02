@@ -1,25 +1,31 @@
-# Deepfake Video Detector - Backend API
+# TrustLens — Backend API
 
 ## AI-Based Deepfake Detection Using Hybrid Spatial-Temporal Deep Learning Framework
 
-This is the FastAPI backend server for the Deepfake Video Detector project.
+FastAPI backend server with a three-branch hybrid detection pipeline: ResNeXt-50 spatial features, bidirectional LSTM temporal modeling, and SigLIP per-frame classification.
 
 ## Features
 
 - **Video Upload API**: Upload videos for deepfake analysis
-- **Spatial Analysis**: Detects facial inconsistencies, lighting anomalies, and artifacts
-- **Temporal Analysis**: Analyzes frame-to-frame consistency and temporal patterns
-- **Real-time Status**: Track analysis progress and retrieve results
-- **RESTful API**: Clean, documented API endpoints
-- **Docker Support**: Containerized deployment with Docker Compose
+- **Hybrid Deep Learning Detection**: Three-branch architecture (ResNeXt-50 + BiLSTM + SigLIP)
+- **Spatial Analysis**: Facial inconsistencies, lighting anomalies, artifact detection via deep features
+- **Temporal Analysis**: Frame continuity, motion consistency, temporal artifacts via BiLSTM
+- **Per-Frame Classification**: SigLIP classifier with 94.44% accuracy
+- **CV Fallback**: Graceful degradation to OpenCV heuristics when deep models fail to load
+- **Artifact Localization**: Per-frame bounding boxes for blur, edge, face, and lighting anomalies
+- **Real-time Status**: Poll analysis progress and retrieve structured results
+- **RESTful API**: Clean, documented endpoints with Swagger/ReDoc
+- **Docker Support**: Multi-stage build with pre-baked model weights
 
 ## Tech Stack
 
-- **FastAPI**: Modern Python web framework
-- **OpenCV**: Video processing and frame extraction
-- **Pydantic**: Data validation and settings management
-- **Uvicorn**: ASGI server
-- **Docker**: Containerization
+- **FastAPI 0.109**: Modern Python web framework
+- **PyTorch ≥2.0 (CPU)**: ResNeXt-50 backbone + BiLSTM temporal modeler
+- **Transformers ≥4.35**: SigLIP deepfake classifier (local inference)
+- **OpenCV 4.9**: Frame extraction + classical CV analysis
+- **Pydantic 2.5**: Data validation and settings management
+- **Uvicorn 0.27**: ASGI server
+- **Docker**: Multi-stage containerization with baked model weights
 
 ## Prerequisites
 

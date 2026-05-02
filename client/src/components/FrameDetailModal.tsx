@@ -4,7 +4,7 @@ import {
     WarningCircle,
     FilmStripIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { FrameAnalysis } from "../services/api";
 
 interface FrameDetailModalProps {
@@ -14,6 +14,38 @@ interface FrameDetailModalProps {
     initialFrameIndex?: number;
 }
 
+const regionColors: Record<
+    string,
+    { stroke: string; fill: string; label: string }
+> = {
+    face_blur: {
+        stroke: "rgba(160, 80, 255, 0.95)",
+        fill: "rgba(160, 80, 255, 0.15)",
+        label: "Face",
+    },
+    blur_anomaly: {
+        stroke: "rgba(255, 140, 0, 0.9)",
+        fill: "rgba(255, 140, 0, 0.12)",
+        label: "Blur",
+    },
+    lighting_inconsistency: {
+        stroke: "rgba(255, 0, 200, 0.9)",
+        fill: "rgba(255, 0, 200, 0.12)",
+        label: "Lighting",
+    },
+    edge_inconsistency: {
+        stroke: "rgba(255, 220, 0, 0.85)",
+        fill: "rgba(255, 220, 0, 0.1)",
+        label: "Edge",
+    },
+};
+
+const defaultColor = {
+    stroke: "rgba(255, 220, 0, 0.85)",
+    fill: "rgba(255, 220, 0, 0.1)",
+    label: "Anomaly",
+};
+
 export default function FrameDetailModal({
     frames,
     videoUrl,
@@ -21,15 +53,90 @@ export default function FrameDetailModal({
     initialFrameIndex = 0,
 }: FrameDetailModalProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [selectedIndex, setSelectedIndex] = useState(initialFrameIndex);
 
     const selectedFrame = frames[selectedIndex];
+
+    const drawArtifacts = useCallback(() => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas || !selectedFrame) return;
+
+        const containerW = video.clientWidth;
+        const containerH = video.clientHeight;
+        canvas.width = containerW;
+        canvas.height = containerH;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.clearRect(0, 0, containerW, containerH);
+
+        const videoW = video.videoWidth;
+        const videoH = video.videoHeight;
+        if (!videoW || !videoH) return;
+
+        const videoAspect = videoW / videoH;
+        const containerAspect = containerW / containerH;
+
+        let renderedW: number,
+            renderedH: number,
+            offsetX: number,
+            offsetY: number;
+        if (videoAspect > containerAspect) {
+            renderedW = containerW;
+            renderedH = containerW / videoAspect;
+        } else {
+            renderedH = containerH;
+            renderedW = containerH * videoAspect;
+        }
+        offsetX = (containerW - renderedW) / 2;
+        offsetY = (containerH - renderedH) / 2;
+
+        const regions = selectedFrame.artifact_regions ?? [];
+        regions.forEach((region) => {
+            const x = offsetX + region.x * renderedW;
+            const y = offsetY + region.y * renderedH;
+            const w = region.width * renderedW;
+            const h = region.height * renderedH;
+            const style = regionColors[region.type] ?? defaultColor;
+
+            ctx.fillStyle = style.fill;
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = style.stroke;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            const label = `${style.label} ${Math.round(region.confidence * 100)}%`;
+            ctx.font = "bold 11px sans-serif";
+            const labelW = ctx.measureText(label).width + 8;
+            const labelH = 18;
+            ctx.fillStyle = style.stroke;
+            ctx.fillRect(x, y - labelH, labelW, labelH);
+            ctx.fillStyle = "white";
+            ctx.fillText(label, x + 4, y - 5);
+        });
+    }, [selectedFrame]);
 
     useEffect(() => {
         if (selectedFrame && videoRef.current) {
             videoRef.current.currentTime = selectedFrame.timestamp;
         }
     }, [selectedFrame]);
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const onLoaded = () => drawArtifacts();
+        const onSeeked = () => drawArtifacts();
+        video.addEventListener("loadeddata", onLoaded);
+        video.addEventListener("seeked", onSeeked);
+        drawArtifacts();
+        return () => {
+            video.removeEventListener("loadeddata", onLoaded);
+            video.removeEventListener("seeked", onSeeked);
+        };
+    }, [drawArtifacts]);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -57,11 +164,15 @@ export default function FrameDetailModal({
                     <div className="flex-1 p-4">
                         <div className="space-y-4 relative">
                             {/* Video */}
-                            <div className="bg-black rounded-xl overflow-hidden border border-gray-800">
+                            <div className="bg-black rounded-xl overflow-hidden border border-gray-800 relative">
                                 <video
                                     ref={videoRef}
                                     src={videoUrl}
-                                    className="w-full aspect-video"
+                                    className="w-full aspect-video object-contain"
+                                />
+                                <canvas
+                                    ref={canvasRef}
+                                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
                                 />
                             </div>
 

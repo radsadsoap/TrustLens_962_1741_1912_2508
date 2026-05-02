@@ -8,8 +8,9 @@ import {
     EyeIcon,
     LightningIcon,
     MagnifyingGlassPlusIcon,
+    CaretDoubleDown,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { AnalysisResult } from "../services/api";
 import FrameDetailModal from "./FrameDetailModal";
 
@@ -30,6 +31,30 @@ export default function Analysis({
 }: AnalysisProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
+    const [showScrollHint, setShowScrollHint] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    const checkScrollable = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const isScrollable = el.scrollHeight > el.clientHeight;
+        const isAtBottom =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+        setShowScrollHint(isScrollable && !isAtBottom);
+    }, []);
+
+    useEffect(() => {
+        checkScrollable();
+        const el = scrollRef.current;
+        if (!el) return;
+        el.addEventListener("scroll", checkScrollable);
+        const ro = new ResizeObserver(checkScrollable);
+        ro.observe(el);
+        return () => {
+            el.removeEventListener("scroll", checkScrollable);
+            ro.disconnect();
+        };
+    }, [analysisResult, checkScrollable]);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -131,23 +156,41 @@ export default function Analysis({
 
         switch (analysisResult.status) {
             case "pending":
-            case "processing":
+            case "processing": {
+                const framesProcessed = analysisResult.frames_processed || 0;
+                const totalFrames = analysisResult.total_frames || 0;
+                const progressPct =
+                    totalFrames > 0
+                        ? Math.round((framesProcessed / totalFrames) * 100)
+                        : 0;
+
                 return (
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-6 rounded-lg flex flex-col items-center gap-4">
-                        <SpinnerGap
-                            size={48}
-                            className="text-blue-400 animate-spin"
-                        />
-                        <div className="text-center">
-                            <p className="text-blue-400 font-semibold mb-1">
-                                Analyzing video
-                            </p>
-                            <p className="text-xs text-gray-400">
-                                This may take 10-30 seconds
-                            </p>
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        {/* Battery progress bar */}
+                        <div className="w-full rounded-xl border border-blue-500/40 bg-gray-900/80 p-1 shadow-lg shadow-blue-500/10">
+                            <div className="relative w-full h-10 rounded-lg overflow-hidden bg-gray-800/60">
+                                <div
+                                    className="absolute inset-y-0 left-0 rounded-lg transition-all duration-700 ease-out"
+                                    style={{
+                                        width: `${progressPct}%`,
+                                        background:
+                                            "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)",
+                                        boxShadow:
+                                            "0 0 12px rgba(59,130,246,0.5)",
+                                    }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-sm font-bold text-white drop-shadow-md tracking-wide">
+                                        {totalFrames > 0
+                                            ? `Frame ${framesProcessed} / ${totalFrames}  —  ${progressPct}%`
+                                            : "Extracting frames"}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 );
+            }
 
             case "failed":
                 return (
@@ -327,8 +370,8 @@ export default function Analysis({
                                                             .temporal_analysis
                                                             .frame_continuity >
                                                         0.5
-                                                            ? "text-red-400"
-                                                            : "text-yellow-400"
+                                                            ? "text-green-400"
+                                                            : "text-red-400"
                                                     }`}
                                                 >
                                                     {Math.round(
@@ -350,8 +393,8 @@ export default function Analysis({
                                                             .temporal_analysis
                                                             .motion_consistency >
                                                         0.5
-                                                            ? "text-red-400"
-                                                            : "text-yellow-400"
+                                                            ? "text-green-400"
+                                                            : "text-red-400"
                                                     }`}
                                                 >
                                                     {Math.round(
@@ -493,8 +536,12 @@ export default function Analysis({
         }
     };
 
+    const scrollToBottom = () => {
+        scrollRef.current?.scrollBy({ top: 150, behavior: "smooth" });
+    };
+
     return (
-        <div className="w-1/4 border-l border-gray-50 p-4 flex flex-col gap-4 overflow-hidden">
+        <div className="w-1/4 border-l border-gray-50 p-4 flex flex-col gap-4 overflow-hidden relative">
             <h2 className="text-2xl font-semibold flex items-center gap-2 tracking-wide">
                 <ShareNetworkIcon weight="duotone" /> Analysis
             </h2>
@@ -529,7 +576,20 @@ export default function Analysis({
                     </div>
                 </div>
             ) : (
-                renderStatus()
+                <div ref={scrollRef} className="flex-1 overflow-y-auto">
+                    {renderStatus()}
+                </div>
+            )}
+
+            {/* Scroll hint */}
+            {showScrollHint && (
+                <button
+                    onClick={scrollToBottom}
+                    className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-800/90 border border-gray-600/50 text-gray-400 hover:text-white rounded-full p-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer"
+                    aria-label="Scroll down for more"
+                >
+                    <CaretDoubleDown size={16} weight="bold" />
+                </button>
             )}
 
             {/* Frame Detail Modal */}

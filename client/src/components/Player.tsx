@@ -151,9 +151,9 @@ export default function Player({
                                     Run analysis
                                 </span>
                                 <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                                    Frames are extracted and classified
-                                    per-frame by a SigLIP Vision Transformer and
-                                    ResNeXt-50 spatial extractor
+                                    Faces are cropped and classified per-frame
+                                    by a ViT deepfake classifier with ResNeXt-50
+                                    spatial feature analysis
                                 </p>
                             </div>
                         </li>
